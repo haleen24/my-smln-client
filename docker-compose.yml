@@ -1,0 +1,9 @@
+version: '3'
+services:
+  launcher:
+      build: Dockerfile
+      container_name: launcher
+      command: python main.py
+  nginx:
+      build: nginx-docker
+      container_name: nginx
