@@ -8,6 +8,11 @@ class SMLN_PROTO{
         ERROR_SERVER: 20
     }
     static SML_ERR = "SMLN_FORMAT_ERROR";
+
+    static isValidResponse(j){
+        return j.hasOwnProperty("type") && j.hasOwnProperty("status") && j.hasOwnProperty("args");
+    }
+
     static clientFile(name, data){
         if(name == null || data == null) throw new Error(this.SML_ERR+": name and data must be set!");
         return JSON.stringify({
@@ -43,7 +48,7 @@ class SMLN_PROTO{
         };
     }
 
-    static queryAuth(login, pass){
+    static auth(login, pass){
         if(login == null || pass == null) throw new Error(this.SML_ERR+": login and pass must be set!");
         return JSON.stringify(this.clientQuery0(
             "auth",
@@ -109,8 +114,11 @@ class SMLN_PROTO{
 class AbstractPageController{
     _globalController;
 
-    constructor(globalc) {
+    _wsController;
+
+    constructor(globalc, cwsc) {
         this._globalController = globalc;
+        this._wsController = cwsc;
     }
     init() {
         throw new Error("AbstractPageController method 'init' must be implemented!");
@@ -121,17 +129,85 @@ class AbstractPageController{
     }
 }
 
+class AbstractCommunicator{
+    _globalController;
+
+    constructor(globalc, send_handle) {
+        this._globalController = globalc;
+        this.send = send_handle;
+    }
+
+    reset(){
+        throw new Error("AbstractCommunicator method 'reset' must be implemented!");
+    }
+
+    set(){
+        throw new Error("AbstractCommunicator method 'set' must be implemented!");
+    }
+
+    /* filtered and valid packet handle */
+    onMessage(data){
+        throw new Error("AbstractCommunicator method 'onMessage' must be implemented!");
+    }
+
+    /* send packet via ws, where 'msg' is json string */
+    send(msg){
+        throw new Error("AbstractCommunicator method 'send' must be overwritten by global controller!");
+    }
+}
+
+class SignCommunicator extends AbstractCommunicator{
+
+    #sign_btn;
+
+    #login_field;
+    #pass_field;
+
+    reset() {
+        this.#sign_btn = null;
+        this.#login_field = null;
+        this.#pass_field = null;
+    }
+
+    set() {
+        this.#sign_btn = document.getElementById("sgnbtn");
+        this.#login_field = document.getElementById("lgnfld");
+        this.#pass_field = document.getElementById("passfld");
+        var that = this;
+        this.#sign_btn.onclick = function (e){
+            that.#on_btn_sign();
+        };
+    }
+
+    #on_btn_sign(){
+        let login = this.#login_field.value;
+        let pass = this.#pass_field.value;
+        this.logIn(login, pass);
+    }
+
+    logIn(login,pass){
+        // TODO: password must be hashed! Currently not hashed.
+        this.send(SMLN_PROTO.auth(login, pass));
+    }
+
+    onMessage(data) {
+
+    }
+}
+
 class SignInController extends AbstractPageController{
     init() {
-        this._globalController.pageInner().innerHTML = `
+        let page = `
         <div class="form">
         <h1 class="auth">Please, authenticate </h1>
-        <input type="text" placeholder="Login">
-        <input type="password" placeholder="Password">
-        <button class="form-btn">Enter</button>
-        <a class="forgot-p" href="#"> Submit</a>
+        <input id="lgnfld" type="text" placeholder="Login">
+        <input id="passfld" type="password" placeholder="Password">
+        <button id="sgnbtn" class="form-btn">Enter</button>
+        <a class="forgot-p" href="#">Help</a>
         </div>
         `;
+        this._globalController.updateContent(page);
+        this._wsController.set();
     }
 
     unload() {
@@ -140,6 +216,9 @@ class SignInController extends AbstractPageController{
 }
 
 class GlobalController{
+
+    static GC_ERR = "GC_LIFETIME_ERROR";
+
     static PAGES = {
         SIGN_IN: "SIGN_IN",
         PASS_SET: "PASS_SET",
@@ -149,36 +228,74 @@ class GlobalController{
 
     #pagec;
 
-    #current;
+    #gws;
+
+    #currentPage;
+    #currentWsc;
 
     #avPages;
+    #avWsc;
 
     static{
-        let jc = new GlobalController();
+        // Encapsulated init
+        let server_addr = "ws://localhost";
+        let jc = new GlobalController(server_addr);
         jc.switch(GlobalController.PAGES.SIGN_IN);
     }
 
-    pageInner(){
-        return this.#pagec;
+    updateContent(str){
+        this.#pagec.innerHTML = str;
     }
 
     switch(pname){
-        if(this.#current != null){
-            this.#current.unload();
+        if(this.#currentPage != null){
+            this.#currentPage.unload();
         }
-        this.#current = this.#avPages[pname];
-        this.#current.init();
+        this.#currentPage = this.#avPages[pname];
+        this.#currentWsc =  this.#avPages[pname]._wsController;
+        this.#currentPage.init();
     }
 
-    _initPages(){
+    _initPagesAndWsc(){
+        var that = this;
         this.#avPages = {
-            "SIGN_IN": new SignInController(this)
+            "SIGN_IN": new SignInController(this, new SignCommunicator(this, function (msg){that.#send(msg);}))
         };
     }
 
-    constructor() {
-        this.#current = null;
+    #send(str){
+        this.#gws.send(str);
+    }
+
+    #onmessageFilter(event){
+        try{
+            let packet = JSON.parse(event.data);
+
+            if(SMLN_PROTO.isValidResponse(packet)){
+                // some filter logic
+                if(this.#currentWsc != null){
+                    this.#currentWsc.onMessage(packet);
+                }else{
+                    console.log(GlobalController.GC_ERR+": WARNING! current websocket controller is empty!");
+                }
+            }else{
+                console.log(GlobalController.GC_ERR+": ERROR! received packet is invalid!");
+            }
+        }catch (e){
+            if(e instanceof SyntaxError){
+                console.log(GlobalController.GC_ERR+": ERROR! received data is invalid and can not be parsed!");
+            }else{
+                console.log(GlobalController.GC_ERR+`: ERROR! unexpected error ${e} while listening to websocket!`);
+            }
+        }
+    }
+
+    constructor(addr) {
+        this.#gws = new WebSocket(addr);
+        this.#gws.onmessage = this.#onmessageFilter;
+        this.#currentPage = null;
+        this.#currentWsc = null;
         this.#pagec = document.getElementById("pagec");
-        this._initPages();
+        this._initPagesAndWsc();
     }
 }
