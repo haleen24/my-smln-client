@@ -1,9 +1,25 @@
 version: '3'
 services:
-  launcher:
-      build: Dockerfile
-      container_name: launcher
-      command: python main.py
+  web:
+    build:
+      dockerfile: Dockerfile
+    ports:
+      - 8080:8080
+    restart:
+      always
+
   nginx:
-      build: nginx-docker
-      container_name: nginx
+    image:
+      nginx
+    restart:
+      always
+    volumes:
+      - ./templates:/etc/nginx/templates
+    ports:
+      - "80:80"
+    links:
+      - web
+    environment:
+      - NGINX_PORT=80
+      - nginx.conf
+
