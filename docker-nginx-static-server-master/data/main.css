@@ -1,0 +1,135 @@
+body{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  background: linear-gradient(25deg, #B8FFB9, #DCFFA5);
+}
+.form{
+  display: flex;
+  height: 300px;
+  width: 450px;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  background-color: #f0f5f0;
+  border-radius: 10px;
+}
+.form_second{
+  display: flex;
+  height: 700px;
+  width: 450px;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  background-color: #f0f5f0;
+  border-radius: 10px;
+}
+.auth{
+  font-family: sans-serif;
+  font-size: 30px;
+  color: #000000;
+  text-transform: uppercase;
+  padding: 0 20px;
+}
+
+.form input{
+  font-size: 18px;
+  padding: 5px;
+  margin: 5px 0;
+  outline-color: #f55e18;
+}
+.forgot-p{
+  color: #4d4c4c;
+  font-size: 18px;
+  text-decoration: none;
+  font-weight: bold;
+  margin: 5px 0;
+  transition: .2s;
+}
+.forgot-p:hover{
+  color: #f55e18;
+  border: none;
+}
+.form-btn{
+  font-size: 25px;
+  text-transform: uppercase;
+  font-family: sans-serif;
+  font-weight: bold;
+  margin-top: 5px;
+  margin-bottom: 15px;
+  padding: 5px 70px;
+  color: #fff;
+
+  /* -webkit-text-fill-color: transparent #fff;
+  -webkit-text-stroke:  1px black;
+  */
+  background: linear-gradient(25deg, #DCFFA5, #B8FFB9);
+  border: none;
+  outline: none;
+  border-radius: 5px;
+  background: linear-gradient(25deg, #C9EB97, #A5EBAB);
+}
+.form-btn:hover{
+  background: linear-gradient(25deg, #B8FFB9, #DCFFA5);
+}
+.form-btn:active{
+  background: linear-gradient(25deg, #DCFFA5, #B8FFB9);
+}
+ul{
+  list-style-type: none;
+  height: 100%;
+  margin: 0;
+}
+.users{
+  display: flex;
+  /*
+  outline: none;
+  border: none;
+  */
+  height: 400px;
+  width: 450px;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  background-color: #f0f5f0;
+  overflow: scroll;
+}
+.user{
+  padding: 2px 0 2px 0;
+  height: 100px;
+  width: 400px;
+}
+.image{
+  float:left;
+  height: 100px;
+  width: 100px;
+}
+.name{
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  float:left;
+  height: 100px;
+  width: 300px;
+  font-size: 20px;
+  color: #000000;
+  text-align: center;
+}
+.selectic{
+  display: flex;
+  outline: none;
+  border: none;
+  height: 400px;
+  width: 450px;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+  text-align: center;
+  background-color: #f0f5f0;
+  font-family: sans-serif;
+  font-size: 20px;
+  color: #000000;
+  text-transform: uppercase;
+  padding: 0 20px;
+}
