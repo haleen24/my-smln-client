@@ -187,11 +187,59 @@ class SignCommunicator extends AbstractCommunicator{
 
     logIn(login,pass){
         // TODO: password must be hashed! Currently not hashed.
-        this.send(SMLN_PROTO.auth(login, pass));
+        //this.send(SMLN_PROTO.auth(login, pass));
+        this._globalController.switch(GlobalController.PAGES.WELCOME);
     }
 
     onMessage(data) {
 
+    }
+}
+
+class WelcomeCommunicator extends AbstractCommunicator{
+
+    #usersBlock;
+    reset() {
+        this.#usersBlock = null;
+    }
+
+    set() {
+        this.#usersBlock = document.getElementById("usrblck");
+    }
+}
+
+class WelcomeController extends AbstractPageController{
+    init() {
+        let page = `
+        <div class="form_second">
+        <h1 class="auth">Welcome! </h1>
+        <h2 class="small_auth">Please, select users: </h2>
+        <div class="users">
+        <ul id="usrblck">
+        </ul>
+        </div>
+        <button class="form-btn">Enter</button>
+        </div>`
+        this._globalController.updateContent(page);
+        this._wsController.set();
+    }
+
+    oneUser(iconurl, name){
+        return `
+        <li>
+        <div class="user">
+        <div class="image">
+        <img src="${iconurl}" width=100px height=100px>
+        </div>
+        <div class="name" text-align: center>
+        ${name}
+        </div>
+        </div>
+        </li>`
+    }
+
+    unload() {
+        this._wsController.reset();
     }
 }
 
@@ -211,7 +259,7 @@ class SignInController extends AbstractPageController{
     }
 
     unload() {
-
+        this._wsController.reset();
     }
 }
 
@@ -247,7 +295,11 @@ class GlobalController{
         this.#pagec.innerHTML = str;
     }
 
+    /* Switches page controller to initiated  */
     switch(pname){
+        if(!(pname in this.#avPages)){
+            throw new Error(GlobalController.GC_ERR+": unknown page!");
+        }
         if(this.#currentPage != null){
             this.#currentPage.unload();
         }
@@ -259,7 +311,8 @@ class GlobalController{
     _initPagesAndWsc(){
         var that = this;
         this.#avPages = {
-            "SIGN_IN": new SignInController(this, new SignCommunicator(this, function (msg){that.#send(msg);}))
+            "SIGN_IN": new SignInController(this, new SignCommunicator(this, function (msg){that.#send(msg);})),
+            "WELCOME": new WelcomeController(this, new WelcomeCommunicator(this, function (msg){that.#send(msg);}))
         };
     }
 
@@ -297,5 +350,12 @@ class GlobalController{
         this.#currentWsc = null;
         this.#pagec = document.getElementById("pagec");
         this._initPagesAndWsc();
+        var that = this;
+        window.addEventListener("beforeunload", function (event){
+            if(that.#currentPage != null && !(that.#currentPage instanceof SignInController)){
+                event.preventDefault();
+                return event.returnValue = "Are you sure you want to leave this messenger session? Then you will have to reauthorize again.";
+            }
+        }, { capture: true });
     }
 }
