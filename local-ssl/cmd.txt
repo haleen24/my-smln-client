@@ -1,0 +1,1 @@
+openssl req -x509 -out D:\GitProjects\smln-client\local-ssl\local_messenger.crt -keyout local_messenger.key -newkey rsa:2048 -days 1024 -nodes -sha256 -subj "/C=RU/O=Dev-Cert-Messenger/CN=LocalSSLMessenger" -extensions EXT -config config.txt
