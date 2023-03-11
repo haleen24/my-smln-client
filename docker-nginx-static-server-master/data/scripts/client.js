@@ -215,6 +215,35 @@ class SignInController extends AbstractPageController{
     }
 }
 
+class LoadController extends AbstractPageController{
+    init() {
+        this.processing();
+    }
+
+    processing(){
+        let page = `
+        <div id="load" class="load-process">
+        <h1 class="def-f">Connecting...</h1>
+        </div>
+        `;
+        this._globalController.updateContent(page);
+    }
+
+    failure(){
+        let page = `
+        <div id="load" class="load-failure">
+        <h1 class="def-f">Messenger network is offline.</h1>
+        <h1 class="def-f">Report it to your administration.</h1>
+        </div>
+        `;
+        this._globalController.updateContent(page);
+    }
+
+    unload() {
+
+    }
+}
+
 class GlobalController{
 
     static GC_ERR = "GC_LIFETIME_ERROR";
@@ -223,7 +252,8 @@ class GlobalController{
         SIGN_IN: "SIGN_IN",
         PASS_SET: "PASS_SET",
         WELCOME: "WELCOME",
-        MENU: "MENU"
+        MENU: "MENU",
+        LOAD: "LOAD"
     }
 
     #pagec;
@@ -235,13 +265,6 @@ class GlobalController{
 
     #avPages;
     #avWsc;
-
-    static{
-        // Encapsulated init
-        let server_addr = "ws://localhost";
-        let jc = new GlobalController(server_addr);
-        jc.switch(GlobalController.PAGES.SIGN_IN);
-    }
 
     updateContent(str){
         this.#pagec.innerHTML = str;
@@ -259,7 +282,8 @@ class GlobalController{
     _initPagesAndWsc(){
         var that = this;
         this.#avPages = {
-            "SIGN_IN": new SignInController(this, new SignCommunicator(this, function (msg){that.#send(msg);}))
+            "SIGN_IN": new SignInController(this, new SignCommunicator(this, function (msg){that.#send(msg);})),
+            "LOAD": new LoadController(this, null)
         };
     }
 
@@ -290,12 +314,36 @@ class GlobalController{
         }
     }
 
+    disable(){
+
+    }
+
     constructor(addr) {
+        var that = this;
         this.#gws = new WebSocket(addr);
-        this.#gws.onmessage = this.#onmessageFilter;
+        this._initPagesAndWsc();
+        this.#pagec = document.getElementById("pagec");
         this.#currentPage = null;
         this.#currentWsc = null;
-        this.#pagec = document.getElementById("pagec");
-        this._initPagesAndWsc();
+        this.#gws.onmessage = function (e){
+            that.#onmessageFilter(e);
+        };
+        this.#gws.onerror = function (e) {
+            if(that.#currentPage != null){
+                that.switch(GlobalController.PAGES.LOAD);
+                that.#currentPage.failure();
+            }
+            that.disable();
+        };
+        this.#gws.onopen = function (e) {
+            that.switch(GlobalController.PAGES.WELCOME);
+        };
+    }
+
+    static{
+        // Encapsulated init
+        let server_addr = "ws://localhost";
+        let jc = new GlobalController(server_addr);
+        jc.switch(GlobalController.PAGES.LOAD);
     }
 }
