@@ -67,10 +67,10 @@ class SMLN_PROTO{
 
     static clientMessage(text, files){
         if(text == null || files == null) throw new Error(this.SML_ERR+": text and files must be set!");
-        return JSON.stringify({
+        return {
             text: text,
             files: files
-        });
+        };
     }
 
     static listProperties(from=0, count=0, sort=null, filter=null, is_ascending=true){
@@ -133,13 +133,14 @@ class SMLN_PROTO{
         ));
     }
 
-    static send(receiverid, cmessage){
-        if(cmessage == null) throw new Error(this.SML_ERR+": client-message must be set!");
+    static send(receiverid, other, my){
+        if(other == null || my == null) throw new Error(this.SML_ERR+": client-message must be set!");
         return JSON.stringify(this.clientQuery0(
             "send",
             {
                 "receiver-id": receiverid,
-                message: cmessage
+                "message-for-receiver": other,
+                "message-for-sender": my
             }
         ));
     }
@@ -263,19 +264,21 @@ class SignCommunicator extends AbstractCommunicator{
         if(this.#lock){
             if(SMLN_PROTO.isSuccess(j)){
                 if(SMLN_PROTO.type(j) === "auth"){
-
                     var up = new UserProvider();
                     var id = j["args"]["id"];
-                    var publicRsa = j["args"]["public-key"];
-                    var privateRsa = j["args"]["private-key"];
+                    let publicRsa =j["args"]["public-key"];
+                    let privateRsa = j["args"]["private-key"];
+                    let pass = this.#pass_field.value;
+                    var puk = forge.pki.publicKeyFromPem(publicRsa);
+                    var prk = forge.pki.decryptRsaPrivateKey(privateRsa, pass);
                     up.getId = function (){
                         return id;
                     };
                     up.getPublicRSA = function (){
-                        return publicRsa;
+                        return puk;
                     };
                     up.getPrivateRSA = function (){
-                        return privateRsa;
+                        return prk;
                     };
                     this._globalController.setUserProvider(up);
                     console.log(this.currentError()+": login successfully!");
@@ -364,20 +367,80 @@ class MenuCommunicator extends AbstractCommunicator{
 
     #search_bar;
 
+    #dialog;
+
+    #inp;
+
+    #errors;
+
     #users = {};
 
     reset() {
         this.#user_ul = null;
         this.#search_bar = null;
+        this.#dialog = null;
+        this.#inp = null;
+        this.#errors = null;
     }
 
     set(){
         this.#user_ul = document.getElementById("contacts_ul");
         this.#search_bar = document.getElementById("search_bar");
+        this.#dialog = document.getElementsByClassName("chat_content")[0];
+        this.#inp = document.getElementById("sendMessage");
+        this.#errors = document.getElementById("errors");
+        this.#selected=null;
         var that = this;
+        this.#inp.addEventListener("change", function (e){
+            let msg = e.target.value.trim();
+            if(msg !== ""){
+                that.sendMessage(that.#selected, msg);
+            }
+        });
         this.#search_bar.addEventListener("keyup", function (e){
             that.pressHandle(e);
         });
+    }
+
+    enc(up, msg){
+        var key = forge.random.getBytesSync(16);
+        var cipher = forge.aes.createEncryptionCipher(key, 'CBC');
+        cipher.start(key);
+        cipher.update(forge.util.createBuffer(msg));
+        cipher.finish();
+        var encrypted = cipher.output.data;
+        return up.getPublicRSA().encrypt(key)+encrypted;
+    }
+
+    dec(up, data){
+        let key = up.getPrivateRSA().decrypt(data.substring(0, 128));
+        data = data.substring(128, data.length);
+        let c = forge.aes.createDecryptionCipher(key, 'CBC');
+        c.start(key);
+        c.update(forge.util.createBuffer(data));
+        c.finish();
+        return c.output.data;
+    }
+
+    sendMessage(to, message){
+        let lp = this._globalController.getUserProvider();
+        this.send(SMLN_PROTO.send(to["user"]["id"], SMLN_PROTO.clientMessage(
+            this.enc(to["provider"], message),
+            []
+        ), SMLN_PROTO.clientMessage(
+            this.enc(lp, message),
+            []
+        )));
+        to["last"] = {
+            "text": message,
+            "sender": lp.getId(),
+            "receiver": to["user"]["id"],
+            "time": parseInt(Date.now()/1000),
+            "files": [] // TODO: files
+        }
+        this.#users[to["id"]] = to;
+        this.#dialog.innerHTML = this.message(false, message) + this.#dialog.innerHTML;
+        this.#inp.value="";
     }
 
     pressHandle(e){
@@ -391,22 +454,62 @@ class MenuCommunicator extends AbstractCommunicator{
         }
     }
 
-    loadDialog(uid){
-        console.log("2");
+    #selected;
+
+    message(my, text){
+        let msg = `
+            <div class="chat_message ${(!my?"chat_item-responder":"")}">
+                <div class="chat_message-content">${text}</div>
+            </div>`
+        return msg;
+    }
+
+    loadDialog(){
+        if(this.#selected == null){
+            this.#inp.disabled = true;
+            this.#dialog.innerHTML = "No users selected!";
+            this.#dialog.classList.add("empty_obj");
+        }else{
+            this.#inp.disabled = false;
+            if(this.#selected["user"]["id"] in this.#users){
+                this.#dialog.classList.remove("empty_obj");
+                this.#dialog.innerHTML = "";
+                this.#curentMsgs.forEach(d => {
+                    this.#dialog.innerHTML += this.message(d["my"], d["text"]);
+                });
+            }else{
+                this.#dialog.innerHTML = "No dialog yet! Start messaging.";
+            }
+        }
+    }
+
+    #curentMsgs = [];
+    #msgWait=false;
+    getMessages(){
+        this.send(SMLN_PROTO.messages(this.#selected["user"]["id"], SMLN_PROTO.listProperties(0, 30)));
     }
 
     refillUsers(){
         if(Object.keys(this.#users).length === 0){
+            this.#user_ul.classList.add("empty_obj");
             this.#user_ul.innerHTML="No contacts available! Use searchbar to find specific ones.";
         }else{
+            this.#user_ul.classList.remove("empty_obj");
             var that = this;
             this.#user_ul.innerHTML="";
-            this.#users.forEach(k => {
-                let user = this.#users[k]["user"];
+            Object.keys(this.#users).forEach(k => {
+                var use = this.#users[k]["user"];
                 let m = this.#users[k]["last"];
-                let e = this.user(user, m["text"]);
+                let lp = this._globalController.getUserProvider();
+                let e = this.user(use, this.dec(lp,m["text"]));
                 e.onclick = function (e){
-                    that.loadDialog(user["id"]);
+                    // for (let li in document.getElementsByClassName("selected")){
+                    //     li.classList.remove("selected");
+                    // }
+                    that.#selected = that.#users[k];
+                    e.target.classList.add("selected");
+                    that.loadDialog();
+                    that.getMessages();
                 }
                 this.#user_ul.appendChild(e);
             })
@@ -415,14 +518,31 @@ class MenuCommunicator extends AbstractCommunicator{
 
     refillOnlyUsers(users){
         if(users.length === 0){
+            this.#user_ul.classList.add("empty_obj");
             this.#user_ul.innerHTML="No contacts available! Use searchbar to find specific ones.";
         }else{
+            this.#user_ul.classList.remove("empty_obj");
             var that = this;
             this.#user_ul.innerHTML="";
             users.forEach(u => {
                 let e = this.user(u, "");
-                e.onclick = function (e){
-                    that.loadDialog(u["id"]);
+                var puk = forge.pki.publicKeyFromPem(u["public-key"]);
+                var user = u;
+                let up = new UserProvider();
+                up.getId = function (){
+                    return user["id"];
+                };
+                up.getPublicRSA = function (){
+                    return puk;
+                }
+                e.onclick = function (ev){
+                    that.#selected = {
+                        "user": user,
+                        "provider": up
+                    }
+                    e.classList.add("selected");
+                    that.loadDialog();
+                    that.getMessages();
                 }
                 this.#user_ul.appendChild(e);
             });
@@ -443,25 +563,54 @@ class MenuCommunicator extends AbstractCommunicator{
 
     onMessage(j){
         if(SMLN_PROTO.isSuccess(j)){
+            setTimeout(t => {
+                this.#errors.innerHTML="";
+            }, 1000);
             if(SMLN_PROTO.type(j) === "people-with-messages"){
                 let chats = j["args"]["chats"];
                 chats.forEach(c => {
                     let user = c["user"];
                     let m = c["last-message"];
+                    let up = new UserProvider();
+                    var uid = user["id"];
+                    var puk = forge.pki.publicKeyFromPem(user["public-key"]);
+                    up.getId = function (e){
+                        return uid;
+                    }
+                    up.getPublicRSA = function (e){
+                        return puk;
+                    }
                     this.#users[user["id"]] = {
                         "user": user,
-                        "other": [],
-                        "my": [],
+                        "provider": up,
                         "last": m
                     };
                 });
                 this.refillUsers();
+                this.loadDialog();
             }else if(SMLN_PROTO.type(j) === "people"){
                 let users = j["args"]["users"];
                 this.refillOnlyUsers(users);
+            }else if(SMLN_PROTO.type(j) === "messages"){
+                let msgs = j["args"]["messages"];
+                let lp = this._globalController.getUserProvider();
+                this.#curentMsgs = msgs.map(m =>{
+                    let d =  { "text": this.dec(lp, m["text"]), "my": (m["receiver"] === lp.getId())};
+                    return d;
+                });
+                this.loadDialog();
+            }else if(SMLN_PROTO.type(j) === "message-received"){
+                let msg = j["args"]["message"];
+                let sender = msg["sender"];
+                let lp = this._globalController.getUserProvider();
+                if(this.#selected != null && this.#selected["user"]["id"] === sender){
+                    this.#dialog.innerHTML = this.message(true, this.dec(lp, msg["text"])) + this.#dialog.innerHTML;
+                }
+            }else if(SMLN_PROTO.type(j) === "activity-update"){
+                // FUTURE
             }
         }else{
-            //this.#spec_msg.innerHTML = SMLN_PROTO.localizedResponse(j);
+            this.#errors.innerHTML = SMLN_PROTO.localizedResponse(j);
             if(!SMLN_PROTO.isKnownResponseStatus(j)){
                 console.log(this.currentError()+`: WARNING! unlocalized response: "${j["status"]["error-message"]}"`);
             }
@@ -472,6 +621,7 @@ class MenuCommunicator extends AbstractCommunicator{
 
 class MenuController extends AbstractPageController{
     init() {
+        // language=HTML
         let page = `
         <div class="column-chat">
         <div class="colomn">
@@ -489,13 +639,14 @@ class MenuController extends AbstractPageController{
         <div class="chat">
         <div class="info">
         </div>
-        <div class="window">No users selected!</div>
+        <div class="chat_content">
+        </div>
         <div class="panel">
-        <textarea class="sendMessage" rows="4" cols="50" name="comment" form="usrform">
-        Enter text here...</textarea>
+        <input id="sendMessage" rows="4" cols="50" name="comment" form="usrform"></input>
         </div>
         </div>
         </div>
+        <div id="errors"></div>
         `;
         this._globalController.updateContent(page);
         this._wsController.send(SMLN_PROTO.peopleWithMessage(SMLN_PROTO.listProperties(0, 10)));
@@ -566,11 +717,20 @@ class GlobalController{
         this.#gws.send(str);
     }
 
-    #onmessageFilter(event){
-        try{
-            let packet = JSON.parse(event.data);
+    #extras = [
+        "message-received",
+        "activity-update"
+    ]
 
-            if(SMLN_PROTO.isValidResponse(packet)){
+    #onmessageFilter(event){
+        // try{
+            let packet = JSON.parse(event.data);
+            if(SMLN_PROTO.isValidResponse(packet) || (packet.hasOwnProperty("type") && this.#extras.includes(SMLN_PROTO.type(packet)))){
+                if(this.#extras.includes(SMLN_PROTO.type(packet))){
+                    packet["status"] = {
+                        "status": SMLN_PROTO.RESPONSE_STATUS.SUCCESS
+                    };
+                }
                 // some filter logic
                 if(this.#currentWsc != null){
                     this.#currentWsc.onMessage(packet);
@@ -581,13 +741,13 @@ class GlobalController{
                 console.log(GlobalController.GC_ERR+": ERROR! received packet is invalid!");
                 console.log(packet);
             }
-        }catch (e){
-            if(e instanceof SyntaxError){
-                console.log(GlobalController.GC_ERR+": ERROR! received data is invalid and can not be parsed!");
-            }else{
-                console.log(GlobalController.GC_ERR+`: ERROR! unexpected error '${e}' while listening to websocket!`);
-            }
-        }
+        // }catch (e){
+        //     if(e instanceof SyntaxError){
+        //         console.log(GlobalController.GC_ERR+": ERROR! received data is invalid and can not be parsed!");
+        //     }else{
+        //         console.log(GlobalController.GC_ERR+`: ERROR! unexpected error '${e}' while listening to websocket!`);
+        //     }
+        // }
     }
 
     disable(){
@@ -618,7 +778,7 @@ class GlobalController{
 
     static{
         // Encapsulated init
-        let server_addr = "ws://localhost:8080";
+        let server_addr = "wss://localhost:444";
         let jc = new GlobalController(server_addr);
         jc.switch(GlobalController.PAGES.LOAD);
     }

@@ -8,6 +8,11 @@ body{
   background: linear-gradient(25deg, #B8FFB9, #DCFFA5);
 }
 /* <Enzhine's> */
+#errors{
+  position: absolute;
+  top: 0;
+  left: 50vw;
+}
 .def-f{
   font-family: sans-serif;
   font-size: 30px;
@@ -83,8 +88,12 @@ body{
   border: 5px solid green;
   */
 }
-.window{
+.selected{
+  border: 2px solid white;
+}
+.chat_content{
   display: flex;
+  flex-direction: column-reverse;
   height: 80vh;
   /*border: 5px solid blue;
   */
@@ -141,7 +150,7 @@ body{
   border-radius: 15px;
   background: #f1f1f1;
 }
-.sendMessage{
+#sendMessage{
   font-size: 17px;
   border: 1px solid grey;
   width: 500px;
@@ -152,6 +161,7 @@ ul{
   list-style-type: none;
   margin: 0;
   padding-left: 0;
+  text-align: center;
 }
 .user{
   height: 100px;
@@ -177,7 +187,52 @@ ul{
   color: #fcfcfc;
   text-align: center;
 }
+.contacts ul{
+  color: white;
+}
+.empty_obj{
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 
+.chat_item {
+  display: flex;
+  align-items: flex-start;
+}
+
+.chat_messages {
+  margin-left: 10px;
+}
+
+.chat_message {
+  display: flex;
+  align-items: center;
+  margin-right: 10px;
+  margin-top: 5px;
+}
+
+.chat_message-content {
+  border-radius: 5px;
+  padding: 7px;
+  background-color: #ccc;
+  display: inline-block;
+  max-width: 400px;
+  margin-left: 5px;
+}
+
+.chat_item-responder {
+  flex-direction: row-reverse;
+}
+
+.chat_item-responder .chat_message {
+  flex-direction: row-reverse;
+}
+
+.chat_item-responder .chat_message-content {
+  margin-left: 0;
+  margin-right: 5px;
+}
 /* </Enzhine's> */
 .form{
   display: flex;
