@@ -406,7 +406,7 @@ class MenuCommunicator extends AbstractCommunicator{
         var key = forge.random.getBytesSync(16);
         var cipher = forge.aes.createEncryptionCipher(key, 'CBC');
         cipher.start(key);
-        cipher.update(forge.util.createBuffer(msg));
+        cipher.update(forge.util.createBuffer(msg, 'utf8'));
         cipher.finish();
         var encrypted = cipher.output.data;
         return up.getPublicRSA().encrypt(key)+encrypted;
@@ -419,7 +419,7 @@ class MenuCommunicator extends AbstractCommunicator{
         c.start(key);
         c.update(forge.util.createBuffer(data));
         c.finish();
-        return c.output.data;
+        return c.output.toString('utf8');
     }
 
     sendMessage(to, message){
